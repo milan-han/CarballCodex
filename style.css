@@ -80,6 +80,13 @@
             text-shadow: 1px 1px 0px #000;
         }
 
+        .start-buttons {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            align-items: center;
+        }
+
         .title-screen .start-button {
             font-size: 14px;
             color: #000;
