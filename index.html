@@ -10,19 +10,6 @@
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
-    <div id="titleScreen" class="title-screen">
-        <h1>CAR BALL</h1>
-        <div class="subtitle">/// DRIFT CHAMPIONSHIP ///</div>
-        <div class="controls">
-            WASD - DRIVE & STEER<br>
-            SPACE - HANDBRAKE (DRIFT)<br>
-            ESC - RETURN TO MENU
-        </div>
-        <div class="start-buttons">
-            <div class="start-button" onclick="hostPrivate()">PRIVATE MATCH</div>
-            <div class="start-button" onclick="joinPublic()">PUBLIC MATCH</div>
-        </div>
-    </div>
 
     <div class="ui-overlay hidden" id="gameUI">
         <div>SPEED: <span id="speedometer">0</span> MPH</div>
@@ -33,10 +20,7 @@
 
     <div id="scoreBoard" class="scoreboard"><span id="topP1">0</span> : <span id="topP2">0</span></div>
 
-    <div id="lobby" class="lobby-screen hidden">
-        <div id="roomInfo"></div>
-        <button id="readyBtn" onclick="readyUp()">READY</button>
-    </div>
+    <div id="linkInfo" class="share-info"></div>
 
     <canvas id="game" width="800" height="600"></canvas>
 

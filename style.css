@@ -112,7 +112,7 @@
             display: none !important;
         }
 
-        .scoreboard {
+.scoreboard {
             position: absolute;
             top: 10px;
             left: 50%;
@@ -122,7 +122,18 @@
             text-shadow: 3px 3px 0 #000;
             z-index: 11;
 
-        }
+}
+
+.share-info {
+    position: absolute;
+    bottom: 10px;
+    left: 50%;
+    transform: translateX(-50%);
+    color: #fff;
+    font-size: 12px;
+    text-shadow: 2px 2px 0 #000;
+    z-index: 11;
+}
 
         .lobby-screen {
             position: absolute;
