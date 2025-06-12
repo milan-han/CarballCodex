@@ -67,6 +67,7 @@ function hostPrivate(){
         history.replaceState(null, '', '?room='+room);
     }
     document.getElementById('titleScreen').classList.add('hidden');
+    document.getElementById('lobby').classList.remove('hidden');
     document.getElementById('roomInfo').textContent = 'Share this link: ' + window.location.href;
     socket.emit('join', room);
 }
@@ -74,6 +75,7 @@ function hostPrivate(){
 function joinPublic(){
     inQueue = true;
     document.getElementById('titleScreen').classList.add('hidden');
+    document.getElementById('lobby').classList.remove('hidden');
     document.getElementById('roomInfo').textContent = 'Finding opponent...';
     socket.emit('queue');
 }
