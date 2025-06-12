@@ -16,6 +16,7 @@ const socket = io();
 let playerNum = 0;
 let isHost = false;
 let myCodes = [];
+let gameStarted = false;
 let room = new URLSearchParams(window.location.search).get('room');
 if(!room){
     room = Math.random().toString(36).substr(2,6);
@@ -52,6 +53,12 @@ socket.emit('join', room);
         });
 
         // ----- UI Functions -----
+        function ensureLoops(){
+            if(gameStarted) return;
+            gameStarted = true;
+            if(isHost) gameLoop(); else renderLoop();
+        }
+
         function startGame() {
             gameState = "playing";
             document.getElementById("titleScreen").classList.add("hidden");
@@ -59,6 +66,7 @@ socket.emit('join', room);
             lapStartTime = Date.now();
             scoreP1 = scoreP2 = 0;
             updateUI();
+            ensureLoops();
         }
 
         function returnToTitle() {
@@ -631,7 +639,6 @@ socket.emit('join', room);
         socket.on('startGame', () => {
             document.getElementById('lobby').classList.add('hidden');
             startGame();
-            if(isHost) gameLoop(); else renderLoop();
         });
 
         socket.on('input', data => {
