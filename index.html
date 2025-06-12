@@ -30,8 +30,14 @@
 
     <div id="scoreBoard" class="scoreboard"><span id="topP1">0</span> : <span id="topP2">0</span></div>
 
+    <div id="lobby" class="lobby-screen hidden">
+        <div id="roomInfo"></div>
+        <button id="readyBtn" onclick="readyUp()">READY</button>
+    </div>
+
     <canvas id="game" width="800" height="600"></canvas>
 
+    <script src="/socket.io/socket.io.js"></script>
     <script src="script.js"></script>
 </body></html> 
  
