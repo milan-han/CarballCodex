@@ -1,12 +1,21 @@
 # Car Ball
 
-This project is a small browser game. Open `index.html` in any modern web browser to start playing.
+This project is a small browser game. It now includes a basic online mode using Node.js and Socket.IO.
+
+## Quick Start
+
+1. Install dependencies with `npm install`.
+2. Run the server using `npm start`.
+3. Open `http://localhost:3000` in your browser.
+4. Share the URL with a friend so they can join the same room.
+
+When launched without a `?room=` query parameter a new room ID will be generated automatically.
 
 ## How to Play
 1. Clone or download this repository.
-2. Locate the `index.html` file in the project root.
-3. Double–click `index.html` or open it via your browser's **File > Open** menu.
-4. The game should load immediately and you can play from the title screen.
+2. Install dependencies and start the server (`npm install` then `npm start`).
+3. Open `http://localhost:3000` in a browser.
+4. Send the address to a friend so they can join your room.
 
 ## Development
 Development mainly happens inside `script.js` and `style.css`.

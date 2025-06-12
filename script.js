@@ -3,13 +3,27 @@
          * ================================*/
 
         // ----- Canvas Setup -----
-        const canvas = document.getElementById("game");
-        const ctx = canvas.getContext("2d");
+const canvas = document.getElementById("game");
+const ctx = canvas.getContext("2d");
 
         // Scale the canvas up using CSS for a chunky pixel look
         const PIXEL_SCALE = 1.2;
         canvas.style.width = canvas.width * PIXEL_SCALE + "px";
-        canvas.style.height = canvas.height * PIXEL_SCALE + "px";
+canvas.style.height = canvas.height * PIXEL_SCALE + "px";
+
+// ----- Networking -----
+const socket = io();
+let playerNum = 0;
+let isHost = false;
+let myCodes = [];
+let gameStarted = false;
+let room = new URLSearchParams(window.location.search).get('room');
+if(!room){
+    room = Math.random().toString(36).substr(2,6);
+    window.location.search = '?room=' + room;
+}
+document.getElementById('roomInfo').textContent = 'Share this link: ' + window.location.href;
+socket.emit('join', room);
 
         // ----- Game State -----
         let gameState = "title"; // "title", "playing"
@@ -28,18 +42,31 @@
         const keys = {};
         window.addEventListener("keydown", (e) => {
             keys[e.code] = true;
+            if(myCodes.includes(e.code)) socket.emit('input',{code:e.code,value:true});
             if (e.code === "Escape" && gameState === "playing") {
                 returnToTitle();
             }
         });
-        window.addEventListener("keyup", (e) => (keys[e.code] = false));
+        window.addEventListener("keyup", (e) => {
+            keys[e.code] = false;
+            if(myCodes.includes(e.code)) socket.emit('input',{code:e.code,value:false});
+        });
 
         // ----- UI Functions -----
+        function ensureLoops(){
+            if(gameStarted) return;
+            gameStarted = true;
+            if(isHost) gameLoop(); else renderLoop();
+        }
+
         function startGame() {
             gameState = "playing";
             document.getElementById("titleScreen").classList.add("hidden");
             document.getElementById("gameUI").classList.remove("hidden");
             lapStartTime = Date.now();
+            scoreP1 = scoreP2 = 0;
+            updateUI();
+            ensureLoops();
         }
 
         function returnToTitle() {
@@ -340,6 +367,10 @@
             celebrating = true;
             celebrateTimer = 0;
             if(goalSide === "left") scoreP2 += 1; else scoreP1 += 1;
+            if(scoreP1 >= 10 || scoreP2 >= 10){
+                alert('Game Over! ' + (scoreP1>scoreP2? 'Player 1':'Player 2') + ' wins');
+                scoreP1 = scoreP2 = 0;
+            }
             updateUI();
 
             // push all cars away from goal direction
@@ -465,15 +496,16 @@
             ctx.clearRect(0, 0, canvas.width, canvas.height);
             drawField();
             
-            ball.update();
+            if(isHost) {
+                ball.update();
 
-            if (!celebrating) {
-                // Normal gameplay for all cars
-                const hits = [];
-                players.forEach(car=>{
-                    car.update();
-                    if (handleCarBallCollision(car)) hits.push(car);
-                });
+                if (!celebrating) {
+                    // Normal gameplay for all cars
+                    const hits = [];
+                    players.forEach(car=>{
+                        car.update();
+                        if (handleCarBallCollision(car)) hits.push(car);
+                    });
                 // If multiple cars hit in same frame, apply recoil to each
                 if (hits.length > 1) {
                     hits.forEach(car=>{
@@ -516,6 +548,7 @@
                     player2.heading = Math.PI;
                 }
             }
+            if(isHost) sendState();
             updateUI();
             
             drawTyreMarks();
@@ -588,4 +621,66 @@
             updateParticles(flames);
         }
 
-        gameLoop();
+        // Networking event handlers
+        socket.on('assignPlayer', num => {
+            playerNum = num;
+            isHost = num === 1;
+            myCodes = Object.values(isHost ? player1Controls : player2Controls);
+        });
+
+        socket.on('bothJoined', () => {
+            document.getElementById('lobby').classList.remove('hidden');
+        });
+
+        socket.on('readyState', (state) => {
+            if(state[playerNum-1]) document.getElementById('readyBtn').textContent = 'WAITING';
+        });
+
+        socket.on('startGame', () => {
+            document.getElementById('lobby').classList.add('hidden');
+            startGame();
+        });
+
+        socket.on('input', data => {
+            if(isHost) keys[data.code] = data.value;
+        });
+
+        socket.on('state', data => {
+            if(!isHost) applyState(data);
+        });
+
+        socket.on('peerDisconnect', () => {
+            alert('Other player disconnected');
+            location.reload();
+        });
+
+        function readyUp(){
+            socket.emit('ready');
+            document.getElementById('readyBtn').disabled = true;
+        }
+
+        function sendState(){
+            const state = {
+                p1:{x:player.x,y:player.y,h:player.heading},
+                p2:{x:player2.x,y:player2.y,h:player2.heading},
+                ball:{x:ball.x,y:ball.y},
+                scoreP1,scoreP2
+            };
+            socket.emit('state', state);
+        }
+
+        function applyState(s){
+            player.x=s.p1.x; player.y=s.p1.y; player.heading=s.p1.h;
+            player2.x=s.p2.x; player2.y=s.p2.y; player2.heading=s.p2.h;
+            ball.x=s.ball.x; ball.y=s.ball.y;
+            scoreP1=s.scoreP1; scoreP2=s.scoreP2;
+        }
+
+        function renderLoop(){
+            ctx.clearRect(0,0,canvas.width,canvas.height);
+            drawField();
+            updateUI();
+            players.forEach(car=>car.draw());
+            ball.draw();
+            requestAnimationFrame(renderLoop);
+        }
