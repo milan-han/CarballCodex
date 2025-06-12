@@ -16,12 +16,15 @@ const socket = io();
 let playerNum = 0;
 let myCodes = [];
 let room = new URLSearchParams(window.location.search).get('room');
-let inQueue = false;
 
-if(room){
-    document.getElementById('roomInfo').textContent = 'Share this link: ' + window.location.href;
-    socket.emit('join', room);
+if(!room){
+    room = Math.random().toString(36).substr(2,6);
+    history.replaceState(null, '', '?room='+room);
 }
+document.getElementById('linkInfo').textContent = 'Share this link: ' + window.location.href;
+socket.emit('join', room);
+startGame();
+requestAnimationFrame(renderLoop);
 
         // ----- Game State -----
         let gameState = "title"; // "title", "playing"
@@ -54,43 +57,15 @@ if(room){
         // ----- UI Functions -----
 function startGame() {
     gameState = "playing";
-    document.getElementById("titleScreen").classList.add("hidden");
     document.getElementById("gameUI").classList.remove("hidden");
     lapStartTime = Date.now();
     scoreP1 = scoreP2 = 0;
     updateUI();
 }
 
-function hostPrivate(){
-    if(!room){
-        room = Math.random().toString(36).substr(2,6);
-        history.replaceState(null, '', '?room='+room);
-    }
-    document.getElementById('titleScreen').classList.add('hidden');
-    document.getElementById('lobby').classList.remove('hidden');
-    document.getElementById('roomInfo').textContent = 'Share this link: ' + window.location.href;
-    socket.emit('join', room);
+function returnToTitle() {
+    location.reload();
 }
-
-function joinPublic(){
-    inQueue = true;
-    document.getElementById('titleScreen').classList.add('hidden');
-    document.getElementById('lobby').classList.remove('hidden');
-    document.getElementById('roomInfo').textContent = 'Finding opponent...';
-    socket.emit('queue');
-}
-
-        function returnToTitle() {
-            gameState = "title";
-            document.getElementById("titleScreen").classList.remove("hidden");
-            document.getElementById("gameUI").classList.add("hidden");
-            // Reset car position
-            player.x = 400;
-            player.y = 500;
-            player.vx = 0;
-            player.vy = 0;
-            player.heading = -Math.PI / 2;
-        }
 
         function updateUI() {
             const speed = Math.hypot(player.vx, player.vy);
@@ -641,25 +616,6 @@ function joinPublic(){
             myCodes = Object.values(num === 1 ? player1Controls : player2Controls);
         });
 
-        socket.on('bothJoined', () => {
-            document.getElementById('lobby').classList.remove('hidden');
-        });
-
-        socket.on('matchFound', id => {
-            room = id;
-            inQueue = false;
-        });
-
-        socket.on('readyState', (state) => {
-            if(state[playerNum-1]) document.getElementById('readyBtn').textContent = 'WAITING';
-        });
-
-        socket.on('startGame', () => {
-            document.getElementById('lobby').classList.add('hidden');
-            startGame();
-            requestAnimationFrame(renderLoop);
-        });
-
         socket.on('state', data => {
             applyState(data);
         });
@@ -669,10 +625,6 @@ function joinPublic(){
             location.reload();
         });
 
-        function readyUp(){
-            socket.emit('ready');
-            document.getElementById('readyBtn').disabled = true;
-        }
 
         function applyState(s){
             player.x=s.p1.x; player.y=s.p1.y; player.heading=s.p1.h;

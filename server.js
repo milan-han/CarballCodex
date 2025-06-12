@@ -8,7 +8,6 @@ const PORT = process.env.PORT || 3000;
 app.use(express.static(__dirname));
 
 const rooms = {};
-const waitingQueue = [];
 
 // --- Simple physics classes ---
 class Car {
@@ -94,13 +93,13 @@ function joinRoom(socket, roomId){
     const controls2 = {forward:'ArrowUp',back:'ArrowDown',left:'ArrowLeft',right:'ArrowRight',brake:'ShiftRight'};
     rooms[roomId] = {
       players: [],
-      ready:[false,false],
       inputs:[{},{}],
       cars:[new Car(100,300,controls1), new Car(700,300,controls2)],
       ball:new Ball(400,300),
       scoreP1:0,
       scoreP2:0,
-      lastTime:Date.now()
+      lastTime:Date.now(),
+      interval:null
     };
   }
   const room = rooms[roomId];
@@ -112,8 +111,9 @@ function joinRoom(socket, roomId){
   room.players.push(socket);
   socket.playerIndex = room.players.length - 1;
   socket.emit('assignPlayer', socket.playerIndex + 1);
-  if(room.players.length === 2){
-    room.players.forEach(s=>s.emit('bothJoined'));
+  if(!room.interval){
+    room.lastTime = Date.now();
+    room.interval = setInterval(()=>gameTick(roomId), 1000/60);
   }
   return true;
 }
@@ -180,30 +180,6 @@ io.on('connection', (socket) => {
     joinRoom(socket, roomId);
   });
 
-  socket.on('queue', () => {
-    waitingQueue.push(socket);
-    if(waitingQueue.length >= 2){
-      const p1 = waitingQueue.shift();
-      const p2 = waitingQueue.shift();
-      const roomId = Math.random().toString(36).substr(2,6);
-      joinRoom(p1, roomId);
-      joinRoom(p2, roomId);
-      p1.emit('matchFound', roomId);
-      p2.emit('matchFound', roomId);
-    }
-  });
-
-  socket.on('ready', () => {
-    const room = rooms[socket.roomId];
-    if(!room) return;
-    room.ready[socket.playerIndex] = true;
-    room.players.forEach(s=>s.emit('readyState', room.ready));
-    if(room.ready[0] && room.ready[1]){
-      room.players.forEach(s=>s.emit('startGame'));
-      room.lastTime = Date.now();
-      room.interval = setInterval(()=>gameTick(socket.roomId), 1000/60);
-    }
-  });
 
   socket.on('input', (data) => {
     const room = rooms[socket.roomId];
@@ -216,15 +192,12 @@ io.on('connection', (socket) => {
     const room = rooms[socket.roomId];
     if(room){
       room.players = room.players.filter(p=>p!==socket);
-      room.ready = [false,false];
       room.players.forEach(s=>s.emit('peerDisconnect'));
       if(room.players.length === 0){
         clearInterval(room.interval);
         delete rooms[socket.roomId];
       }
     }
-    const idx = waitingQueue.indexOf(socket);
-    if(idx !== -1) waitingQueue.splice(idx,1);
   });
 });
 
