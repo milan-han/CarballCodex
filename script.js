@@ -17,12 +17,12 @@ let playerNum = 0;
 let isHost = false;
 let myCodes = [];
 let room = new URLSearchParams(window.location.search).get('room');
-if(!room){
-    room = Math.random().toString(36).substr(2,6);
-    window.location.search = '?room=' + room;
+let inQueue = false;
+
+if(room){
+    document.getElementById('roomInfo').textContent = 'Share this link: ' + window.location.href;
+    socket.emit('join', room);
 }
-document.getElementById('roomInfo').textContent = 'Share this link: ' + window.location.href;
-socket.emit('join', room);
 
         // ----- Game State -----
         let gameState = "title"; // "title", "playing"
@@ -52,14 +52,31 @@ socket.emit('join', room);
         });
 
         // ----- UI Functions -----
-        function startGame() {
-            gameState = "playing";
-            document.getElementById("titleScreen").classList.add("hidden");
-            document.getElementById("gameUI").classList.remove("hidden");
-            lapStartTime = Date.now();
-            scoreP1 = scoreP2 = 0;
-            updateUI();
-        }
+function startGame() {
+    gameState = "playing";
+    document.getElementById("titleScreen").classList.add("hidden");
+    document.getElementById("gameUI").classList.remove("hidden");
+    lapStartTime = Date.now();
+    scoreP1 = scoreP2 = 0;
+    updateUI();
+}
+
+function hostPrivate(){
+    if(!room){
+        room = Math.random().toString(36).substr(2,6);
+        history.replaceState(null, '', '?room='+room);
+    }
+    document.getElementById('titleScreen').classList.add('hidden');
+    document.getElementById('roomInfo').textContent = 'Share this link: ' + window.location.href;
+    socket.emit('join', room);
+}
+
+function joinPublic(){
+    inQueue = true;
+    document.getElementById('titleScreen').classList.add('hidden');
+    document.getElementById('roomInfo').textContent = 'Finding opponent...';
+    socket.emit('queue');
+}
 
         function returnToTitle() {
             gameState = "title";
@@ -622,6 +639,11 @@ socket.emit('join', room);
 
         socket.on('bothJoined', () => {
             document.getElementById('lobby').classList.remove('hidden');
+        });
+
+        socket.on('matchFound', id => {
+            room = id;
+            inQueue = false;
         });
 
         socket.on('readyState', (state) => {
