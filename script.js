@@ -14,7 +14,6 @@ canvas.style.height = canvas.height * PIXEL_SCALE + "px";
 // ----- Networking -----
 const socket = io();
 let playerNum = 0;
-let isHost = false;
 let myCodes = [];
 let room = new URLSearchParams(window.location.search).get('room');
 let inQueue = false;
@@ -36,6 +35,7 @@ if(room){
         let confetti = [];
         let celebrateTimer = 0;
         const CELEBRATION_MS = 1500;
+        let lastTime = 0;
 
         // ----- Input Handling -----
         const keys = {};
@@ -134,7 +134,8 @@ function joinPublic(){
                 this.controls = controls;
             }
 
-            update() {
+            update(dt) {
+                const dtScale = dt / 16.6667;
                 if (gameState !== "playing") return;
 
                 // Capture previous handbrake state then update current
@@ -148,8 +149,8 @@ function joinPublic(){
                 let lateral = -this.vx * sin + this.vy * cos;     // sideways velocity (drift component)
 
                 // === Throttle & Brake ===
-                if (keys[this.controls.forward]) forward += this.acceleration;
-                if (keys[this.controls.back])    forward -= this.acceleration * 0.8;
+                if (keys[this.controls.forward]) forward += this.acceleration * dtScale;
+                if (keys[this.controls.back])    forward -= this.acceleration * 0.8 * dtScale;
 
                 // === Steering ===
                 let steerInput = 0;
@@ -157,16 +158,16 @@ function joinPublic(){
                 else if (keys[this.controls.right]) steerInput = 1;
 
                 // Turn rate grows with speed for tighter feel
-                let turnRate = steerInput * this.turnSpeed * (Math.abs(forward) / 2 + 0.3);
+                let turnRate = steerInput * this.turnSpeed * (Math.abs(forward) / 2 + 0.3) * dtScale;
                 if (forward < 0) turnRate = -turnRate; // invert steering when reversing
                 this.heading += turnRate;
 
                 // === Handbrake & Drift Physics ===
-                const forwardFriction = 0.02;                        // always present
-                const sideFriction = this.handbrake ? 0.03 : 0.3;     // VERY grippy unless handbrake pressed
+                const forwardFriction = 0.02;
+                const sideFriction = this.handbrake ? 0.03 : 0.3;
 
-                forward *= (1 - forwardFriction);
-                lateral *= (1 - sideFriction);
+                forward *= (1 - forwardFriction * dtScale);
+                lateral *= (1 - sideFriction * dtScale);
 
                 // Drift indicator based on lateral slip
                 const slip = Math.abs(lateral);
@@ -179,7 +180,7 @@ function joinPublic(){
                     // smoke
                     smoke.push({ x: this.x - cos*15, y: this.y - sin*15, vy: -0.5+Math.random()*-0.5, vx:(Math.random()-0.5)*0.5, life:60, alpha:1 });
                     // accumulate drift charge
-                    this.driftCharge = (this.driftCharge || 0) + 1;
+                    this.driftCharge = (this.driftCharge || 0) + dtScale;
                     if (this.driftCharge > 60) {
                         // continuous sparks after holding drift > 1s
                         for (let s=0; s<2; s++) {
@@ -193,7 +194,7 @@ function joinPublic(){
                 } else {
                     // if we just released after long drift, give boost
                     if (prevHandbrake && !this.handbrake && (this.driftCharge||0) > 60) {
-                        forward += 4; // boost
+                        forward += 4 * dtScale; // boost
                         for(let f=0; f<30; f++){
                             flames.push({ x: this.x, y: this.y, vx:(Math.random()-0.5)*3, vy:(Math.random()-0.5)*3, life:25, max:25 });
                         }
@@ -213,8 +214,8 @@ function joinPublic(){
                 }
 
                 // === Update position ===
-                this.x += this.vx;
-                this.y += this.vy;
+                this.x += this.vx * dtScale;
+                this.y += this.vy * dtScale;
 
                 // Track / canvas bounds
                 this.checkTrackBounds();
@@ -287,14 +288,15 @@ function joinPublic(){
                 this.vy = 0;
             }
 
-            update() {
+            update(dt) {
+                const dtScale = dt / 16.6667;
                 // Apply friction
-                this.vx *= 0.98;
-                this.vy *= 0.98;
+                this.vx *= Math.pow(0.98, dtScale);
+                this.vy *= Math.pow(0.98, dtScale);
 
                 // Update position
-                this.x += this.vx;
-                this.y += this.vy;
+                this.x += this.vx * dtScale;
+                this.y += this.vy * dtScale;
 
                 // Bounce off field boundaries, allowing for goals
                 const goalH = 120;
@@ -500,19 +502,22 @@ function joinPublic(){
         }
 
         // ----- Setup & Game Loop -----
-        function gameLoop() {
+        function gameLoop(timestamp) {
+            if(!lastTime) lastTime = timestamp;
+            const dt = timestamp - lastTime;
+            lastTime = timestamp;
             // Clear and draw
             ctx.clearRect(0, 0, canvas.width, canvas.height);
             drawField();
             
             if(isHost) {
-                ball.update();
+                ball.update(dt);
 
                 if (!celebrating) {
                     // Normal gameplay for all cars
                     const hits = [];
                     players.forEach(car=>{
-                        car.update();
+                        car.update(dt);
                         if (handleCarBallCollision(car)) hits.push(car);
                     });
                 // If multiple cars hit in same frame, apply recoil to each
@@ -532,12 +537,11 @@ function joinPublic(){
                 updateAllParticles();
             } else {
                 // Celebration physics
-                celebrateTimer += 16; // approximate ms per frame
-                // Move exploding car (player 1)
-                player.x += player.vx;
-                player.y += player.vy;
-                player.vx *= 0.95;
-                player.vy *= 0.95;
+                celebrateTimer += dt;
+                player.x += player.vx * (dt/16.6667);
+                player.y += player.vy * (dt/16.6667);
+                player.vx *= Math.pow(0.95, dt/16.6667);
+                player.vy *= Math.pow(0.95, dt/16.6667);
 
                 updateConfetti();
                 updateAllParticles();
@@ -557,7 +561,6 @@ function joinPublic(){
                     player2.heading = Math.PI;
                 }
             }
-            if(isHost) sendState();
             updateUI();
             
             drawTyreMarks();
@@ -633,8 +636,7 @@ function joinPublic(){
         // Networking event handlers
         socket.on('assignPlayer', num => {
             playerNum = num;
-            isHost = num === 1;
-            myCodes = Object.values(isHost ? player1Controls : player2Controls);
+            myCodes = Object.values(num === 1 ? player1Controls : player2Controls);
         });
 
         socket.on('bothJoined', () => {
@@ -653,15 +655,11 @@ function joinPublic(){
         socket.on('startGame', () => {
             document.getElementById('lobby').classList.add('hidden');
             startGame();
-            if(isHost) gameLoop(); else renderLoop();
-        });
-
-        socket.on('input', data => {
-            if(isHost) keys[data.code] = data.value;
+            requestAnimationFrame(renderLoop);
         });
 
         socket.on('state', data => {
-            if(!isHost) applyState(data);
+            applyState(data);
         });
 
         socket.on('peerDisconnect', () => {
@@ -672,16 +670,6 @@ function joinPublic(){
         function readyUp(){
             socket.emit('ready');
             document.getElementById('readyBtn').disabled = true;
-        }
-
-        function sendState(){
-            const state = {
-                p1:{x:player.x,y:player.y,h:player.heading},
-                p2:{x:player2.x,y:player2.y,h:player2.heading},
-                ball:{x:ball.x,y:ball.y},
-                scoreP1,scoreP2
-            };
-            socket.emit('state', state);
         }
 
         function applyState(s){
