@@ -10,28 +10,14 @@
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
-    <div id="titleScreen" class="title-screen">
-        <h1>CAR BALL</h1>
-        <div class="subtitle">/// DRIFT CHAMPIONSHIP ///</div>
-        <div class="controls">
-            WASD - DRIVE & STEER<br>
-            SPACE - HANDBRAKE (DRIFT)<br>
-            ESC - RETURN TO MENU
+    <div id="linkBox" class="link-box">
+        <button id="generateLink">Generate Game Link</button>
+        <div id="shareArea" class="hidden">Share this link with a friend:<br>
+            <a id="gameLink" href="#"></a>
         </div>
-        <div class="start-button" onclick="startGame()">PRESS TO RACE</div>
     </div>
-
-    <div class="ui-overlay hidden" id="gameUI">
-        <div>SPEED: <span id="speedometer">0</span> MPH</div>
-        <div>LAP TIME: <span id="lapTime">00:00</span></div>
-        <div>DRIFT: <span id="driftMeter">0</span>%</div>
-        <div>SCORE: <span id="hudP1">0</span> : <span id="hudP2">0</span></div>
-    </div>
-
-    <div id="scoreBoard" class="scoreboard"><span id="topP1">0</span> : <span id="topP2">0</span></div>
-
     <canvas id="game" width="800" height="600"></canvas>
-
+    <script src="/socket.io/socket.io.js"></script>
     <script src="script.js"></script>
-</body></html> 
- 
+</body>
+</html>
