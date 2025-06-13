@@ -13,6 +13,12 @@ let socket = null;
 let myId = null;
 let cars = {};
 let ball = { x: 400, y: 300 };
+const effects = {
+  streaks: [],
+  smokes: [],
+  fires: []
+};
+let lastTime = performance.now();
 
 function startGame() {
   socket = io({ query: { room } });
@@ -25,9 +31,15 @@ function startGame() {
     ball = state.ball;
     for (const id of Object.keys(state.cars)) {
       if (!cars[id]) cars[id] = { x: 0, y: 0, h: 0 };
-      cars[id].x = state.cars[id].x;
-      cars[id].y = state.cars[id].y;
-      cars[id].h = state.cars[id].h;
+      const cstate = state.cars[id];
+      cars[id].prevX = cars[id].x;
+      cars[id].prevY = cars[id].y;
+      cars[id].x = cstate.x;
+      cars[id].y = cstate.y;
+      cars[id].h = cstate.h;
+      cars[id].hb = cstate.hb;
+      cars[id].br = cstate.br;
+      cars[id].bt = cstate.bt;
     }
     for (const id of Object.keys(cars)) {
       if (!state.cars[id]) delete cars[id];
@@ -67,7 +79,12 @@ function drawCar(c, isMe) {
   ctx.translate(c.x, c.y);
   ctx.rotate(c.h);
   ctx.fillStyle = isMe ? '#c62828' : '#2962ff';
-  ctx.fillRect(-12, -6, 24, 12);
+  ctx.fillRect(-12, -7, 24, 14);
+  ctx.fillStyle = '#333';
+  ctx.fillRect(-8, -5, 16, 6);
+  ctx.fillStyle = '#555';
+  ctx.fillRect(-10, -7, 4, 14);
+  ctx.fillRect(6, -7, 4, 14);
   ctx.restore();
 }
 
@@ -81,9 +98,73 @@ function drawBall() {
   ctx.stroke();
 }
 
+function updateEffects(dt) {
+  for (const id of Object.keys(cars)) {
+    const c = cars[id];
+    const cos = Math.cos(c.h);
+    const sin = Math.sin(c.h);
+    const backX = c.x - cos * 12;
+    const backY = c.y - sin * 12;
+    if (c.hb) {
+      effects.streaks.push({ x: backX, y: backY, life: 30 });
+      effects.smokes.push({ x: backX, y: backY, r: 4, life: 20 });
+    }
+    if (c.br) {
+      effects.fires.push({ x: backX, y: backY, r: 5, life: 15 });
+    }
+    if (c.bt) {
+      for (let i = 0; i < 5; i++) {
+        effects.fires.push({
+          x: backX + (Math.random() - 0.5) * 8,
+          y: backY + (Math.random() - 0.5) * 8,
+          r: 6 + Math.random() * 4,
+          life: 30
+        });
+      }
+    }
+  }
+  effects.streaks.forEach(s => (s.life -= dt * 0.1));
+  effects.streaks = effects.streaks.filter(s => s.life > 0);
+  effects.smokes.forEach(s => {
+    s.life -= dt * 0.1;
+    s.r += dt * 0.02;
+  });
+  effects.smokes = effects.smokes.filter(s => s.life > 0);
+  effects.fires.forEach(f => (f.life -= dt * 0.1));
+  effects.fires = effects.fires.filter(f => f.life > 0);
+}
+
+function drawEffects() {
+  effects.streaks.forEach(s => {
+    ctx.strokeStyle = `rgba(0,0,0,${s.life / 30})`;
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(s.x, s.y);
+    ctx.lineTo(s.x - 5, s.y - 5);
+    ctx.stroke();
+  });
+  effects.smokes.forEach(s => {
+    ctx.fillStyle = `rgba(200,200,200,${s.life / 20})`;
+    ctx.beginPath();
+    ctx.arc(s.x, s.y, s.r, 0, Math.PI * 2);
+    ctx.fill();
+  });
+  effects.fires.forEach(f => {
+    ctx.fillStyle = `rgba(255,120,0,${f.life / 30})`;
+    ctx.beginPath();
+    ctx.arc(f.x, f.y, f.r, 0, Math.PI * 2);
+    ctx.fill();
+  });
+}
+
 function loop() {
+  const now = performance.now();
+  const dt = now - lastTime;
+  lastTime = now;
   ctx.clearRect(0, 0, canvas.width, canvas.height);
   drawField();
+  updateEffects(dt);
+  drawEffects();
   drawBall();
   for (const id of Object.keys(cars)) {
     drawCar(cars[id], id === myId);

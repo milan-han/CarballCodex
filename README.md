@@ -15,6 +15,8 @@ This project is a small browser game. It now includes a basic online mode using 
 2. Install dependencies and start the server (`npm install` then `npm start`).
 3. Open `http://localhost:3000` in a browser.
 4. Send the address to a friend so they can join your room.
+5. Hold **Shift** to charge a boost. When the fire appears, release to launch forward!
+6. Hold **Space** to drift and leave tire streaks.
 
 ## Development
 Development mainly happens inside `script.js` and `style.css`.
