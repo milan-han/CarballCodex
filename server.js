@@ -21,6 +21,10 @@ class Car {
     this.maxSpeed = 6;
     this.turnSpeed = 0.05;
     this.handbrake = false;
+    this.boostEnergy = 0;
+    this.boostReady = false;
+    this.boostCharging = false;
+    this.boostTimer = 0;
   }
 
   update(dt, input) {
@@ -29,6 +33,30 @@ class Car {
     const sin = Math.sin(this.heading);
     let forward = this.vx * cos + this.vy * sin;
     let lateral = -this.vx * sin + this.vy * cos;
+
+    if (input['ShiftLeft']) {
+      this.boostCharging = true;
+      this.boostEnergy += dt * 0.2;
+      if (this.boostEnergy >= 100) {
+        this.boostEnergy = 100;
+        this.boostReady = true;
+      }
+    } else {
+      if (this.boostCharging) {
+        if (this.boostReady) {
+          forward += 8;
+          this.boostTimer = 10;
+        }
+        this.boostCharging = false;
+        this.boostReady = false;
+        this.boostEnergy = 0;
+      }
+    }
+
+    if (this.boostTimer > 0) {
+      this.boostTimer -= scale;
+      if (this.boostTimer < 0) this.boostTimer = 0;
+    }
 
     if (input['KeyW']) forward += this.acceleration * scale;
     if (input['KeyS']) forward -= this.acceleration * 0.8 * scale;
@@ -159,7 +187,7 @@ function gameTick(room) {
     ball: { x: game.ball.x, y: game.ball.y }
   };
   for (const [id, car] of Object.entries(game.cars)) {
-    state.cars[id] = { x: car.x, y: car.y, h: car.heading };
+    state.cars[id] = { x: car.x, y: car.y, h: car.heading, hb: car.handbrake, br: car.boostReady, bt: car.boostTimer > 0 };
   }
   io.to(room).emit('state', state);
 }
