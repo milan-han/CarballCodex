@@ -1,35 +1,46 @@
 const canvas = document.getElementById('game');
 const ctx = canvas.getContext('2d');
 
-const socket = io();
+const linkBox = document.getElementById('linkBox');
+const generateBtn = document.getElementById('generateLink');
+const shareArea = document.getElementById('shareArea');
+const roomLink = document.getElementById('gameLink');
+
+const params = new URLSearchParams(window.location.search);
+let room = params.get('room');
+
+let socket = null;
 let myId = null;
 let cars = {};
 let ball = { x: 400, y: 300 };
 
-socket.on('init', id => {
-  myId = id;
-});
+function startGame() {
+  socket = io({ query: { room } });
 
-socket.on('state', state => {
-  ball = state.ball;
-  // update cars
-  for (const id of Object.keys(state.cars)) {
-    if (!cars[id]) cars[id] = { x: 0, y: 0, h: 0 };
-    cars[id].x = state.cars[id].x;
-    cars[id].y = state.cars[id].y;
-    cars[id].h = state.cars[id].h;
-  }
-  for (const id of Object.keys(cars)) {
-    if (!state.cars[id]) delete cars[id];
-  }
-});
+  socket.on('init', id => {
+    myId = id;
+  });
 
-window.addEventListener('keydown', e => {
-  socket.emit('input', { code: e.code, value: true });
-});
-window.addEventListener('keyup', e => {
-  socket.emit('input', { code: e.code, value: false });
-});
+  socket.on('state', state => {
+    ball = state.ball;
+    for (const id of Object.keys(state.cars)) {
+      if (!cars[id]) cars[id] = { x: 0, y: 0, h: 0 };
+      cars[id].x = state.cars[id].x;
+      cars[id].y = state.cars[id].y;
+      cars[id].h = state.cars[id].h;
+    }
+    for (const id of Object.keys(cars)) {
+      if (!state.cars[id]) delete cars[id];
+    }
+  });
+
+  window.addEventListener('keydown', e => {
+    socket.emit('input', { code: e.code, value: true });
+  });
+  window.addEventListener('keyup', e => {
+    socket.emit('input', { code: e.code, value: false });
+  });
+}
 
 function drawField() {
   ctx.fillStyle = '#2d5a2d';
@@ -81,3 +92,22 @@ function loop() {
 }
 
 loop();
+
+if (room) {
+  const url = window.location.origin + window.location.pathname + '?room=' + room;
+  roomLink.textContent = url;
+  roomLink.href = url;
+  shareArea.classList.remove('hidden');
+  generateBtn.classList.add('hidden');
+  startGame();
+} else {
+  canvas.classList.add('hidden');
+  generateBtn.addEventListener('click', () => {
+    room = Math.random().toString(36).substr(2, 6);
+    const url = window.location.origin + window.location.pathname + '?room=' + room;
+    roomLink.textContent = url;
+    roomLink.href = url;
+    shareArea.classList.remove('hidden');
+    generateBtn.classList.add('hidden');
+  });
+}

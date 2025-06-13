@@ -7,9 +7,8 @@ This project is a small browser game. It now includes a basic online mode using 
 1. Install dependencies with `npm install`.
 2. Run the server using `npm start`.
 3. Open `http://localhost:3000` in your browser.
-4. Share the URL with a friend so they can join the same room.
-
-When launched without a `?room=` query parameter a new room ID will be generated automatically.
+4. Click **Generate Game Link** and copy the URL that appears.
+5. Share that link with a friend so they can join the same room.
 
 ## How to Play
 1. Clone or download this repository.
