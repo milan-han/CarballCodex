@@ -145,3 +145,18 @@
             font-family: "Press Start 2P", monospace;
             cursor: pointer;
         }
+
+        .link-box {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            background: rgba(0,0,0,0.7);
+            color: #fff;
+            padding: 10px;
+            font-size: 12px;
+            z-index: 30;
+        }
+
+        .link-box a {
+            color: #00ff00;
+        }

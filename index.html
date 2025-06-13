@@ -10,6 +10,12 @@
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
+    <div id="linkBox" class="link-box">
+        <button id="generateLink">Generate Game Link</button>
+        <div id="shareArea" class="hidden">Share this link with a friend:<br>
+            <a id="gameLink" href="#"></a>
+        </div>
+    </div>
     <canvas id="game" width="800" height="600"></canvas>
     <script src="/socket.io/socket.io.js"></script>
     <script src="script.js"></script>

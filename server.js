@@ -7,6 +7,9 @@ const PORT = process.env.PORT || 3000;
 
 app.use(express.static(__dirname));
 
+// store separate game state for each room
+const games = {}; // roomId -> game object
+
 class Car {
   constructor(x, y) {
     this.x = x;
@@ -127,15 +130,20 @@ function handleCarBall(car, ball) {
   }
 }
 
-const game = {
-  cars: {}, // id -> Car
-  inputs: {}, // id -> input map
-  ball: new Ball(400, 300),
-  lastTime: Date.now(),
-  interval: null
-};
+function createGame(room) {
+  return {
+    room,
+    cars: {}, // id -> Car
+    inputs: {}, // id -> input map
+    ball: new Ball(400, 300),
+    lastTime: Date.now(),
+    interval: null
+  };
+}
 
-function gameTick() {
+function gameTick(room) {
+  const game = games[room];
+  if (!game) return;
   const now = Date.now();
   const dt = now - game.lastTime;
   game.lastTime = now;
@@ -153,10 +161,22 @@ function gameTick() {
   for (const [id, car] of Object.entries(game.cars)) {
     state.cars[id] = { x: car.x, y: car.y, h: car.heading };
   }
-  io.emit('state', state);
+  io.to(room).emit('state', state);
 }
 
 io.on('connection', socket => {
+  const room = socket.handshake.query.room;
+  if (!room) {
+    socket.disconnect();
+    return;
+  }
+
+  socket.join(room);
+  if (!games[room]) {
+    games[room] = createGame(room);
+  }
+  const game = games[room];
+
   const spawnX = 100 + Math.random() * 600;
   const spawnY = 100 + Math.random() * 400;
   game.cars[socket.id] = new Car(spawnX, spawnY);
@@ -165,7 +185,7 @@ io.on('connection', socket => {
 
   if (!game.interval) {
     game.lastTime = Date.now();
-    game.interval = setInterval(gameTick, 1000 / 60);
+    game.interval = setInterval(() => gameTick(room), 1000 / 60);
   }
 
   socket.on('input', data => {
@@ -179,7 +199,7 @@ io.on('connection', socket => {
     delete game.inputs[socket.id];
     if (Object.keys(game.cars).length === 0) {
       clearInterval(game.interval);
-      game.interval = null;
+      delete games[room];
     }
   });
 });
