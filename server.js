@@ -9,11 +9,13 @@ app.use(express.static(__dirname));
 
 // store separate game state for each room
 const games = {}; // roomId -> game object
+const COLORS = ['#c62828', '#2962ff', '#00c853', '#ff9800'];
 
 class Car {
-  constructor(x, y) {
+  constructor(x, y, color) {
     this.x = x;
     this.y = y;
+    this.color = color;
     this.heading = -Math.PI / 2;
     this.vx = 0;
     this.vy = 0;
@@ -187,7 +189,15 @@ function gameTick(room) {
     ball: { x: game.ball.x, y: game.ball.y }
   };
   for (const [id, car] of Object.entries(game.cars)) {
-    state.cars[id] = { x: car.x, y: car.y, h: car.heading, hb: car.handbrake, br: car.boostReady, bt: car.boostTimer > 0 };
+    state.cars[id] = {
+      x: car.x,
+      y: car.y,
+      h: car.heading,
+      color: car.color,
+      hb: car.handbrake,
+      br: car.boostReady,
+      bt: car.boostTimer > 0
+    };
   }
   io.to(room).emit('state', state);
 }
@@ -207,7 +217,8 @@ io.on('connection', socket => {
 
   const spawnX = 100 + Math.random() * 600;
   const spawnY = 100 + Math.random() * 400;
-  game.cars[socket.id] = new Car(spawnX, spawnY);
+  const color = COLORS[Object.keys(game.cars).length % COLORS.length];
+  game.cars[socket.id] = new Car(spawnX, spawnY, color);
   game.inputs[socket.id] = {};
   socket.emit('init', socket.id);
 

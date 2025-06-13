@@ -30,14 +30,13 @@ function startGame() {
   socket.on('state', state => {
     ball = state.ball;
     for (const id of Object.keys(state.cars)) {
-      if (!cars[id]) cars[id] = { x: 0, y: 0, h: 0, color: '#fff' };
+      if (!cars[id]) cars[id] = { x: 0, y: 0, h: 0 };
       const cstate = state.cars[id];
       cars[id].prevX = cars[id].x;
       cars[id].prevY = cars[id].y;
       cars[id].x = cstate.x;
       cars[id].y = cstate.y;
       cars[id].h = cstate.h;
-      cars[id].color = cstate.color;
       cars[id].hb = cstate.hb;
       cars[id].br = cstate.br;
       cars[id].bt = cstate.bt;
@@ -79,18 +78,13 @@ function drawCar(c, isMe) {
   ctx.save();
   ctx.translate(c.x, c.y);
   ctx.rotate(c.h);
-  ctx.fillStyle = c.color || (isMe ? '#c62828' : '#2962ff');
+  ctx.fillStyle = isMe ? '#c62828' : '#2962ff';
   ctx.fillRect(-12, -7, 24, 14);
   ctx.fillStyle = '#333';
   ctx.fillRect(-8, -5, 16, 6);
   ctx.fillStyle = '#555';
   ctx.fillRect(-10, -7, 4, 14);
   ctx.fillRect(6, -7, 4, 14);
-  if (isMe) {
-    ctx.strokeStyle = '#fff';
-    ctx.lineWidth = 2;
-    ctx.strokeRect(-12, -7, 24, 14);
-  }
   ctx.restore();
 }
 
