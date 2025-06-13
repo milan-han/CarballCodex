@@ -1,194 +1,591 @@
-const canvas = document.getElementById('game');
-const ctx = canvas.getContext('2d');
+        /* ================================
+         *  Enhanced Retro Racer
+         * ================================*/
 
-const linkBox = document.getElementById('linkBox');
-const generateBtn = document.getElementById('generateLink');
-const shareArea = document.getElementById('shareArea');
-const roomLink = document.getElementById('gameLink');
+        // ----- Canvas Setup -----
+        const canvas = document.getElementById("game");
+        const ctx = canvas.getContext("2d");
 
-const params = new URLSearchParams(window.location.search);
-let room = params.get('room');
+        // Scale the canvas up using CSS for a chunky pixel look
+        const PIXEL_SCALE = 1.2;
+        canvas.style.width = canvas.width * PIXEL_SCALE + "px";
+        canvas.style.height = canvas.height * PIXEL_SCALE + "px";
 
-let socket = null;
-let myId = null;
-let cars = {};
-let ball = { x: 400, y: 300 };
-const effects = {
-  streaks: [],
-  smokes: [],
-  fires: []
-};
-let lastTime = performance.now();
+        // ----- Game State -----
+        let gameState = "title"; // "title", "playing"
+        let lapStartTime = Date.now();
 
-function startGame() {
-  socket = io({ query: { room } });
+        // Soccer game state
+        let scoreP1 = 0;
+        let scoreP2 = 0;
+        // Celebration state
+        let celebrating = false;
+        let confetti = [];
+        let celebrateTimer = 0;
+        const CELEBRATION_MS = 1500;
 
-  socket.on('init', id => {
-    myId = id;
-  });
-
-  socket.on('state', state => {
-    ball = state.ball;
-    for (const id of Object.keys(state.cars)) {
-      if (!cars[id]) cars[id] = { x: 0, y: 0, h: 0 };
-      const cstate = state.cars[id];
-      cars[id].prevX = cars[id].x;
-      cars[id].prevY = cars[id].y;
-      cars[id].x = cstate.x;
-      cars[id].y = cstate.y;
-      cars[id].h = cstate.h;
-      cars[id].hb = cstate.hb;
-      cars[id].br = cstate.br;
-      cars[id].bt = cstate.bt;
-    }
-    for (const id of Object.keys(cars)) {
-      if (!state.cars[id]) delete cars[id];
-    }
-  });
-
-  window.addEventListener('keydown', e => {
-    socket.emit('input', { code: e.code, value: true });
-  });
-  window.addEventListener('keyup', e => {
-    socket.emit('input', { code: e.code, value: false });
-  });
-}
-
-function drawField() {
-  ctx.fillStyle = '#2d5a2d';
-  ctx.fillRect(0, 0, canvas.width, canvas.height);
-  ctx.strokeStyle = '#ffffff';
-  ctx.lineWidth = 4;
-  ctx.strokeRect(20, 20, canvas.width - 40, canvas.height - 40);
-  ctx.beginPath();
-  ctx.moveTo(canvas.width / 2, 20);
-  ctx.lineTo(canvas.width / 2, canvas.height - 20);
-  ctx.stroke();
-  ctx.beginPath();
-  ctx.arc(canvas.width / 2, canvas.height / 2, 60, 0, Math.PI * 2);
-  ctx.stroke();
-  const goalH = 120;
-  ctx.fillStyle = 'rgba(198,40,40,0.4)';
-  ctx.fillRect(20, (canvas.height - goalH) / 2, 10, goalH);
-  ctx.fillStyle = 'rgba(41,98,255,0.4)';
-  ctx.fillRect(canvas.width - 30, (canvas.height - goalH) / 2, 10, goalH);
-}
-
-function drawCar(c, isMe) {
-  ctx.save();
-  ctx.translate(c.x, c.y);
-  ctx.rotate(c.h);
-  ctx.fillStyle = isMe ? '#c62828' : '#2962ff';
-  ctx.fillRect(-12, -7, 24, 14);
-  ctx.fillStyle = '#333';
-  ctx.fillRect(-8, -5, 16, 6);
-  ctx.fillStyle = '#555';
-  ctx.fillRect(-10, -7, 4, 14);
-  ctx.fillRect(6, -7, 4, 14);
-  ctx.restore();
-}
-
-function drawBall() {
-  ctx.fillStyle = '#fff';
-  ctx.beginPath();
-  ctx.arc(ball.x, ball.y, 12, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.strokeStyle = '#000';
-  ctx.lineWidth = 2;
-  ctx.stroke();
-}
-
-function updateEffects(dt) {
-  for (const id of Object.keys(cars)) {
-    const c = cars[id];
-    const cos = Math.cos(c.h);
-    const sin = Math.sin(c.h);
-    const backX = c.x - cos * 12;
-    const backY = c.y - sin * 12;
-    if (c.hb) {
-      effects.streaks.push({ x: backX, y: backY, life: 30 });
-      effects.smokes.push({ x: backX, y: backY, r: 4, life: 20 });
-    }
-    if (c.br) {
-      effects.fires.push({ x: backX, y: backY, r: 5, life: 15 });
-    }
-    if (c.bt) {
-      for (let i = 0; i < 5; i++) {
-        effects.fires.push({
-          x: backX + (Math.random() - 0.5) * 8,
-          y: backY + (Math.random() - 0.5) * 8,
-          r: 6 + Math.random() * 4,
-          life: 30
+        // ----- Input Handling -----
+        const keys = {};
+        window.addEventListener("keydown", (e) => {
+            keys[e.code] = true;
+            if (e.code === "Escape" && gameState === "playing") {
+                returnToTitle();
+            }
         });
-      }
-    }
-  }
-  effects.streaks.forEach(s => (s.life -= dt * 0.1));
-  effects.streaks = effects.streaks.filter(s => s.life > 0);
-  effects.smokes.forEach(s => {
-    s.life -= dt * 0.1;
-    s.r += dt * 0.02;
-  });
-  effects.smokes = effects.smokes.filter(s => s.life > 0);
-  effects.fires.forEach(f => (f.life -= dt * 0.1));
-  effects.fires = effects.fires.filter(f => f.life > 0);
-}
+        window.addEventListener("keyup", (e) => (keys[e.code] = false));
 
-function drawEffects() {
-  effects.streaks.forEach(s => {
-    ctx.strokeStyle = `rgba(0,0,0,${s.life / 30})`;
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    ctx.moveTo(s.x, s.y);
-    ctx.lineTo(s.x - 5, s.y - 5);
-    ctx.stroke();
-  });
-  effects.smokes.forEach(s => {
-    ctx.fillStyle = `rgba(200,200,200,${s.life / 20})`;
-    ctx.beginPath();
-    ctx.arc(s.x, s.y, s.r, 0, Math.PI * 2);
-    ctx.fill();
-  });
-  effects.fires.forEach(f => {
-    ctx.fillStyle = `rgba(255,120,0,${f.life / 30})`;
-    ctx.beginPath();
-    ctx.arc(f.x, f.y, f.r, 0, Math.PI * 2);
-    ctx.fill();
-  });
-}
+        // ----- UI Functions -----
+        function startGame() {
+            gameState = "playing";
+            document.getElementById("titleScreen").classList.add("hidden");
+            document.getElementById("gameUI").classList.remove("hidden");
+            lapStartTime = Date.now();
+        }
 
-function loop() {
-  const now = performance.now();
-  const dt = now - lastTime;
-  lastTime = now;
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
-  drawField();
-  updateEffects(dt);
-  drawEffects();
-  drawBall();
-  for (const id of Object.keys(cars)) {
-    drawCar(cars[id], id === myId);
-  }
-  requestAnimationFrame(loop);
-}
+        function returnToTitle() {
+            gameState = "title";
+            document.getElementById("titleScreen").classList.remove("hidden");
+            document.getElementById("gameUI").classList.add("hidden");
+            // Reset car position
+            player.x = 400;
+            player.y = 500;
+            player.vx = 0;
+            player.vy = 0;
+            player.heading = -Math.PI / 2;
+        }
 
-loop();
+        function updateUI() {
+            const speed = Math.hypot(player.vx, player.vy);
+            document.getElementById("speedometer").textContent = Math.round(speed * 15);
+            
+            const elapsed = (Date.now() - lapStartTime) / 1000;
+            const minutes = Math.floor(elapsed / 60);
+            const seconds = (elapsed % 60).toFixed(1);
+            document.getElementById("lapTime").textContent = 
+                `${minutes.toString().padStart(2, "0")}:${seconds.padStart(4, "0")}`;
+            
+            document.getElementById("driftMeter").textContent = Math.round(player.driftAmount);
+            document.getElementById("hudP1").textContent = scoreP1;
+            document.getElementById("hudP2").textContent = scoreP2;
+            document.getElementById("topP1").textContent = scoreP1;
+            document.getElementById("topP2").textContent = scoreP2;
+        }
 
-if (room) {
-  const url = window.location.origin + window.location.pathname + '?room=' + room;
-  roomLink.textContent = url;
-  roomLink.href = url;
-  shareArea.classList.remove('hidden');
-  generateBtn.classList.add('hidden');
-  startGame();
-} else {
-  canvas.classList.add('hidden');
-  generateBtn.addEventListener('click', () => {
-    room = Math.random().toString(36).substr(2, 6);
-    const url = window.location.origin + window.location.pathname + '?room=' + room;
-    roomLink.textContent = url;
-    roomLink.href = url;
-    shareArea.classList.remove('hidden');
-    generateBtn.classList.add('hidden');
-  });
-}
+        // ----- Enhanced Car with Drifting -----
+        class Car {
+            constructor(x, y, color, controls) {
+                this.x = x;
+                this.y = y;
+                this.heading = -Math.PI / 2;
+
+                // Physics
+                this.vx = 0;
+                this.vy = 0;
+                this.acceleration = 0.15;
+                this.maxSpeed = 6;
+                this.friction = 0.03;
+                this.turnSpeed = 0.05;
+                
+                // Drift mechanics
+                this.gripLevel = 0.85; // How much car grips vs slides
+                this.driftAmount = 0; // Visual drift indicator
+                this.handbrake = false;
+                // Dimensions for drawing
+                this.w = 14; // car width
+                this.h = 24; // car length
+
+                this.color = color;
+                this.controls = controls;
+            }
+
+            update() {
+                if (gameState !== "playing") return;
+
+                // Capture previous handbrake state then update current
+                const prevHandbrake = this.handbrake;
+                this.handbrake = keys[this.controls.brake];
+
+                // === Convert world velocity to car-local coordinates ===
+                const cos = Math.cos(this.heading);
+                const sin = Math.sin(this.heading);
+                let forward = this.vx * cos + this.vy * sin;      // velocity along heading
+                let lateral = -this.vx * sin + this.vy * cos;     // sideways velocity (drift component)
+
+                // === Throttle & Brake ===
+                if (keys[this.controls.forward]) forward += this.acceleration;
+                if (keys[this.controls.back])    forward -= this.acceleration * 0.8;
+
+                // === Steering ===
+                let steerInput = 0;
+                if (keys[this.controls.left])  steerInput = -1;
+                else if (keys[this.controls.right]) steerInput = 1;
+
+                // Turn rate grows with speed for tighter feel
+                let turnRate = steerInput * this.turnSpeed * (Math.abs(forward) / 2 + 0.3);
+                if (forward < 0) turnRate = -turnRate; // invert steering when reversing
+                this.heading += turnRate;
+
+                // === Handbrake & Drift Physics ===
+                const forwardFriction = 0.02;                        // always present
+                const sideFriction = this.handbrake ? 0.03 : 0.3;     // VERY grippy unless handbrake pressed
+
+                forward *= (1 - forwardFriction);
+                lateral *= (1 - sideFriction);
+
+                // Drift indicator based on lateral slip
+                const slip = Math.abs(lateral);
+                this.driftAmount = Math.min(slip * 25, 100);
+
+                // --- Drift particle effects ---
+                if (this.handbrake && slip > 0.4) {
+                    // tyre marks
+                    tyreMarks.push({ x: this.x, y: this.y, life: 200 });
+                    // smoke
+                    smoke.push({ x: this.x - cos*15, y: this.y - sin*15, vy: -0.5+Math.random()*-0.5, vx:(Math.random()-0.5)*0.5, life:60, alpha:1 });
+                    // accumulate drift charge
+                    this.driftCharge = (this.driftCharge || 0) + 1;
+                    if (this.driftCharge > 60) {
+                        // continuous sparks after holding drift > 1s
+                        for (let s=0; s<2; s++) {
+                            sparks.push({ x: this.x - cos*14, y: this.y - sin*14, vx:(Math.random()-0.5)*4, vy:(Math.random()-1.5)*4, life:30 });
+                        }
+                    }
+                    // flame when boost ready
+                    if(this.driftCharge > 60){
+                        flames.push({ x: this.x - cos*18, y: this.y - sin*18, vx:-cos*0.2, vy:-sin*0.2, life:20, max:20 });
+                    }
+                } else {
+                    // if we just released after long drift, give boost
+                    if (prevHandbrake && !this.handbrake && (this.driftCharge||0) > 60) {
+                        forward += 4; // boost
+                        for(let f=0; f<30; f++){
+                            flames.push({ x: this.x, y: this.y, vx:(Math.random()-0.5)*3, vy:(Math.random()-0.5)*3, life:25, max:25 });
+                        }
+                    }
+                    this.driftCharge = 0;
+                }
+
+                // === Convert back to world velocity ===
+                this.vx =  cos * forward - sin * lateral;
+                this.vy =  sin * forward + cos * lateral;
+
+                // === Speed cap ===
+                const speed = Math.hypot(this.vx, this.vy);
+                if (speed > this.maxSpeed) {
+                    this.vx *= this.maxSpeed / speed;
+                    this.vy *= this.maxSpeed / speed;
+                }
+
+                // === Update position ===
+                this.x += this.vx;
+                this.y += this.vy;
+
+                // Track / canvas bounds
+                this.checkTrackBounds();
+            }
+
+            checkTrackBounds() {
+                // Simple boundary check - slow down if hitting grass
+                if (!this.isOnTrack()) {
+                    this.vx *= 0.8;
+                    this.vy *= 0.8;
+                }
+                
+                // Keep in canvas bounds
+                if (this.x < 20) { this.x = 20; this.vx = Math.abs(this.vx) * 0.5; }
+                if (this.x > canvas.width - 20) { this.x = canvas.width - 20; this.vx = -Math.abs(this.vx) * 0.5; }
+                if (this.y < 20) { this.y = 20; this.vy = Math.abs(this.vy) * 0.5; }
+                if (this.y > canvas.height - 20) { this.y = canvas.height - 20; this.vy = -Math.abs(this.vy) * 0.5; }
+            }
+
+            isOnTrack() {
+                // Whole canvas is playable field now
+                return true;
+            }
+
+            draw() {
+                ctx.save();
+                ctx.translate(this.x, this.y);
+                ctx.rotate(this.heading);
+
+                // Car body main
+                ctx.fillStyle = this.color;
+                ctx.fillRect(-this.h / 2, -this.w / 2, this.h, this.w);
+                // Roof
+                ctx.fillStyle = "#e57373";
+                ctx.fillRect(-this.h/4, -this.w/4, this.h/2, this.w/2);
+                // Front bumper
+                ctx.fillStyle = "#b71c1c";
+                ctx.fillRect(this.h/2-2, -this.w/2, 2, this.w);
+
+                // Car details
+                ctx.fillStyle = "#222";
+                ctx.fillRect(2, -this.w / 2 + 2, this.h / 3, this.w - 4); // Windshield
+                
+                // Wheels
+                ctx.fillStyle = "#111";
+                ctx.fillRect(-this.h / 2 + 3, -this.w / 2 - 1, 4, 2);
+                ctx.fillRect(-this.h / 2 + 3, this.w / 2 - 1, 4, 2);
+                ctx.fillRect(this.h / 2 - 7, -this.w / 2 - 1, 4, 2);
+                ctx.fillRect(this.h / 2 - 7, this.w / 2 - 1, 4, 2);
+
+                // Drift effect
+                if (this.driftAmount > 30) {
+                    ctx.fillStyle = "rgba(255, 255, 255, 0.6)";
+                    for (let i = 0; i < 3; i++) {
+                        ctx.fillRect(-this.h / 2 - 5 - i * 3, -2, 3, 1);
+                    }
+                }
+
+                ctx.restore();
+            }
+        }
+
+        // ----- Soccer Ball -----
+        class Ball {
+            constructor(x, y) {
+                this.x = x;
+                this.y = y;
+                this.r = 12;
+                this.vx = 0;
+                this.vy = 0;
+            }
+
+            update() {
+                // Apply friction
+                this.vx *= 0.98;
+                this.vy *= 0.98;
+
+                // Update position
+                this.x += this.vx;
+                this.y += this.vy;
+
+                // Bounce off field boundaries, allowing for goals
+                const goalH = 120;
+                const goalTop = (canvas.height - goalH) / 2;
+                const goalBottom = goalTop + goalH;
+                const inGoalMouthY = this.y > goalTop && this.y < goalBottom;
+
+                if (this.x - this.r < 20 && !inGoalMouthY) { this.x = 20 + this.r; this.vx *= -0.6; }
+                if (this.x + this.r > canvas.width - 20 && !inGoalMouthY) { this.x = canvas.width - 20 - this.r; this.vx *= -0.6; }
+                if (this.y - this.r < 20) { this.y = 20 + this.r; this.vy *= -0.6; }
+                if (this.y + this.r > canvas.height - 20) { this.y = canvas.height - 20 - this.r; this.vy *= -0.6; }
+            }
+
+            draw() {
+                ctx.save();
+                ctx.translate(this.x, this.y);
+                ctx.fillStyle = "#ffffff";
+                ctx.beginPath();
+                ctx.arc(0, 0, this.r, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.strokeStyle = "#000";
+                ctx.lineWidth = 2;
+                ctx.stroke();
+                ctx.restore();
+            }
+        }
+
+        // ----- Field Drawing -----
+        function drawField() {
+            ctx.fillStyle = "#2d5a2d"; // grass
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            // Field lines
+            ctx.strokeStyle = "#ffffff";
+            ctx.lineWidth = 4;
+            ctx.strokeRect(20, 20, canvas.width - 40, canvas.height - 40); // outer lines
+
+            // Halfway line
+            ctx.beginPath();
+            ctx.moveTo(canvas.width / 2, 20);
+            ctx.lineTo(canvas.width / 2, canvas.height - 20);
+            ctx.stroke();
+
+            // Center circle
+            ctx.beginPath();
+            ctx.arc(canvas.width / 2, canvas.height / 2, 60, 0, Math.PI * 2);
+            ctx.stroke();
+
+            // Goals
+            const goalH = 120;
+            // left goal tinted red
+            ctx.fillStyle = "rgba(198,40,40,0.4)";
+            ctx.fillRect(20, (canvas.height - goalH) / 2, 10, goalH);
+            // right goal tinted blue
+            ctx.fillStyle = "rgba(41,98,255,0.4)";
+            ctx.fillRect(canvas.width - 30, (canvas.height - goalH) / 2, 10, goalH);
+        }
+
+        // ----- Initialize Entities -----
+        // Control maps
+        const player1Controls = { forward:"KeyW", back:"KeyS", left:"KeyA", right:"KeyD", brake:"Space" };
+        const player2Controls = { forward:"ArrowUp", back:"ArrowDown", left:"ArrowLeft", right:"ArrowRight", brake:"ShiftRight" };
+
+        const player  = new Car(100, canvas.height / 2, "#c62828", player1Controls);
+        const player2 = new Car(canvas.width - 100, canvas.height / 2, "#2962ff", player2Controls);
+
+        const players = [player, player2];
+
+        let ball = new Ball(canvas.width / 2, canvas.height / 2);
+
+        function resetBall() {
+            ball.x = canvas.width / 2;
+            ball.y = canvas.height / 2;
+            ball.vx = 0;
+            ball.vy = 0;
+        }
+
+        function startCelebration(goalSide) {
+            celebrating = true;
+            celebrateTimer = 0;
+            if(goalSide === "left") scoreP2 += 1; else scoreP1 += 1;
+            updateUI();
+
+            // push all cars away from goal direction
+            players.forEach(car=>{
+               car.vx = goalSide === "left" ? 1 : -1 * 10;
+               car.vy = (Math.random()*2-1)*6;
+            });
+
+            // Confetti particles
+            confetti = [];
+            const originX = ball.x;
+            const originY = ball.y;
+            for (let i = 0; i < 150; i++) {
+                confetti.push({
+                    x: originX,
+                    y: originY,
+                    vx: (Math.random() - 0.5) * 8,
+                    vy: (Math.random() - 0.5) * 8 - 3,
+                    color: `hsl(${Math.random()*360}, 80%, 60%)`,
+                    life: Math.random() * 60 + 40
+                });
+            }
+        }
+
+        function detectGoal() {
+            const goalH = 120;
+            const goalTop = (canvas.height - goalH) / 2;
+            const goalBottom = goalTop + goalH;
+
+            if (celebrating) return; // ignore during celebration
+
+            // Left goal scored
+            if (ball.x - ball.r <= 20 && ball.y >= goalTop && ball.y <= goalBottom) {
+                startCelebration("left");
+            }
+            // Right goal scored
+            if (ball.x + ball.r >= canvas.width - 20 && ball.y >= goalTop && ball.y <= goalBottom) {
+                startCelebration("right");
+            }
+        }
+
+        function handleCarBallCollision(car) {
+            const dx = ball.x - car.x;
+            const dy = ball.y - car.y;
+            const dist = Math.hypot(dx, dy);
+            const minDist = ball.r + Math.max(car.w, car.h) / 2;
+            if (dist < minDist) {
+                const overlap = minDist - dist + 0.1;
+                const nx = dx / dist;
+                const ny = dy / dist;
+                // Push ball out of collision
+                ball.x += nx * overlap;
+                ball.y += ny * overlap;
+                // Apply impulse based on car velocity
+                ball.vx += car.vx * 0.5 + nx * 2;
+                ball.vy += car.vy * 0.5 + ny * 2;
+                return true;
+            }
+            return false;
+        }
+
+        function updateConfetti() {
+            for (let i = confetti.length - 1; i >= 0; i--) {
+                const p = confetti[i];
+                p.vy += 0.15; // gravity
+                p.x += p.vx;
+                p.y += p.vy;
+                p.life--;
+                if (p.life <= 0) confetti.splice(i, 1);
+            }
+        }
+
+        function drawConfetti() {
+            confetti.forEach(p => {
+                ctx.fillStyle = p.color;
+                ctx.fillRect(p.x, p.y, 3, 3);
+            });
+        }
+
+        // Add new function below handleCarBallCollision
+        function handleCarCarCollisions() {
+            for (let i = 0; i < players.length; i++) {
+                for (let j = i + 1; j < players.length; j++) {
+                    const a = players[i];
+                    const b = players[j];
+                    const dx = b.x - a.x;
+                    const dy = b.y - a.y;
+                    const dist = Math.hypot(dx, dy);
+                    const ra = Math.max(a.w, a.h) / 2;
+                    const rb = Math.max(b.w, b.h) / 2;
+                    const minDist = ra + rb;
+                    if (dist < minDist && dist !== 0) {
+                        const nx = dx / dist;
+                        const ny = dy / dist;
+                        const overlap = minDist - dist;
+
+                        // Separate cars
+                        a.x -= nx * overlap / 2;
+                        a.y -= ny * overlap / 2;
+                        b.x += nx * overlap / 2;
+                        b.y += ny * overlap / 2;
+
+                        // Simple elastic impulse
+                        const relVx = a.vx - b.vx;
+                        const relVy = a.vy - b.vy;
+                        const relDot = relVx * nx + relVy * ny;
+                        if (relDot < 0) {
+                            const restitution = 0.8;
+                            const impulse = -(1 + restitution) * relDot / 2;
+                            a.vx += nx * impulse;
+                            a.vy += ny * impulse;
+                            b.vx -= nx * impulse;
+                            b.vy -= ny * impulse;
+                        }
+                    }
+                }
+            }
+        }
+
+        // ----- Setup & Game Loop -----
+        function gameLoop() {
+            // Clear and draw
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            drawField();
+            
+            ball.update();
+
+            if (!celebrating) {
+                // Normal gameplay for all cars
+                const hits = [];
+                players.forEach(car=>{
+                    car.update();
+                    if (handleCarBallCollision(car)) hits.push(car);
+                });
+                // If multiple cars hit in same frame, apply recoil to each
+                if (hits.length > 1) {
+                    hits.forEach(car=>{
+                        const dx = car.x - ball.x;
+                        const dy = car.y - ball.y;
+                        const dist = Math.hypot(dx, dy) || 1;
+                        const nx = dx / dist;
+                        const ny = dy / dist;
+                        car.vx += nx * 4;
+                        car.vy += ny * 4;
+                     });
+                }
+                handleCarCarCollisions();
+                detectGoal();
+                updateAllParticles();
+            } else {
+                // Celebration physics
+                celebrateTimer += 16; // approximate ms per frame
+                // Move exploding car (player 1)
+                player.x += player.vx;
+                player.y += player.vy;
+                player.vx *= 0.95;
+                player.vy *= 0.95;
+
+                updateConfetti();
+                updateAllParticles();
+
+                if (celebrateTimer >= CELEBRATION_MS) {
+                    celebrating = false;
+                    resetBall();
+                    // Reset both cars to their side positions
+                    player.x = 100;
+                    player.y = canvas.height / 2;
+                    player.vx = player.vy = 0;
+                    player.heading = 0;
+
+                    player2.x = canvas.width - 100;
+                    player2.y = canvas.height / 2;
+                    player2.vx = player2.vy = 0;
+                    player2.heading = Math.PI;
+                }
+            }
+            updateUI();
+            
+            drawTyreMarks();
+            players.forEach(car=>car.draw());
+            drawFlames();
+            ball.draw();
+            drawConfetti();
+
+            requestAnimationFrame(gameLoop);
+        }
+
+        // ----- Particle Updates -----
+        let smoke = [];
+        let tyreMarks = [];
+        let sparks = [];
+        let flames = [];
+
+        function updateParticles(arr) {
+            for (let i = arr.length-1; i>=0; i--) {
+                const p = arr[i];
+                p.x += p.vx || 0;
+                p.y += p.vy || 0;
+                p.life--;
+                if (p.alpha!==undefined) p.alpha = p.life/60;
+                if (p.life<=0) arr.splice(i,1);
+            }
+        }
+
+        function drawSmoke() {
+            smoke.forEach(p=> {
+                ctx.fillStyle = `rgba(200,200,200,${p.alpha})`;
+                ctx.beginPath();
+                ctx.arc(p.x, p.y, 4, 0, Math.PI*2);
+                ctx.fill();
+            });
+        }
+
+        function drawTyreMarks() {
+            tyreMarks.forEach(t=> {
+                ctx.strokeStyle = `rgba(50,50,50,${t.life/200})`;
+                ctx.lineWidth =2;
+                ctx.beginPath();
+                ctx.moveTo(t.x, t.y);
+                ctx.lineTo(t.x+1, t.y+1);
+                ctx.stroke();
+            });
+        }
+
+        function drawSparks() {
+            sparks.forEach(s=> {
+                ctx.fillStyle = `rgba(255,${200+Math.random()*55|0},0,${s.life/30})`;
+                ctx.fillRect(s.x, s.y,2,2);
+            });
+        }
+
+        function drawFlames() {
+            flames.forEach(f=>{
+                const a = f.life / f.max;
+                ctx.fillStyle = `rgba(255,${150+Math.random()*80|0},0,${a})`;
+                ctx.beginPath();
+                ctx.arc(f.x, f.y, 5*(a), 0, Math.PI*2);
+                ctx.fill();
+            });
+        }
+
+        function updateAllParticles() {
+            updateParticles(smoke);
+            updateParticles(tyreMarks);
+            updateParticles(sparks);
+            updateParticles(flames);
+        }
+
+        gameLoop();
